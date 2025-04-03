@@ -513,149 +513,168 @@ app.delete("/ProduitDelete/:id", async (req, res) => {
 
 
 
-  app.delete('/factures/:id', async (req, res) => {
-    const factureId = req.params.id;
+app.delete('/factures/:id', async (req, res) => {
+  const factureId = req.params.id;
 
-    const connection = await db.getConnection();
-    try {
-        await connection.beginTransaction();
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
 
-        // 1️⃣ Récupérer les articles liés à la facture
-        const [articles] = await connection.query(
-            'SELECT produit_id, quantite FROM articles_facture WHERE facture_id = ?',
-            [factureId]
-        );
+    const [articles] = await connection.query(
+      'SELECT produit_id, quantite FROM articles_facture WHERE facture_id = ?',
+      [factureId]
+    );
 
-        if (articles.length === 0) {
-            return res.status(404).json({ message: "Facture introuvable ou déjà supprimée" });
-        }
-
-        // 2️⃣ Réapprovisionner les produits
-        for (const { produit_id, quantite } of articles) {
-            await connection.query(
-                'UPDATE produits SET quantite = quantite + ? WHERE id = ?',
-                [quantite, produit_id]
-            );
-        }
-
-        // 3️⃣ Supprimer les articles de la facture
-        await connection.query(
-            'DELETE FROM articles_facture WHERE facture_id = ?',
-            [factureId]
-        );
-
-        // 4️⃣ Supprimer la facture
-        await connection.query(
-            'DELETE FROM factures WHERE id = ?',
-            [factureId]
-        );
-
-        await connection.commit();
-        res.json({ message: `Facture ${factureId} supprimée avec succès.` });
-
-    } catch (error) {
-        await connection.rollback();
-        console.error("❌ Erreur:", error);
-        res.status(500).json({ message: "Erreur lors de la suppression de la facture." });
-    } finally {
-        connection.release();
+    if (articles.length === 0) {
+      return res.status(404).json({ message: "Facture introuvable ou déjà supprimée" });
     }
+
+    for (const { produit_id, quantite } of articles) {
+      await connection.query(
+        'UPDATE produits SET quantite = quantite + ? WHERE id = ?',
+        [quantite, produit_id]
+      );
+    }
+
+    await connection.query(
+      'DELETE FROM articles_facture WHERE facture_id = ?',
+      [factureId]
+    );
+
+    await connection.query(
+      'DELETE FROM factures WHERE id = ?',
+      [factureId]
+    );
+
+    await connection.commit();
+    res.json({ message: `Facture ${factureId} supprimée avec succès.` });
+  } catch (error) {
+    await connection.rollback();
+    console.error("❌ Erreur:", error);
+    res.status(500).json({ message: "Erreur lors de la suppression de la facture." });
+  } finally {
+    connection.release();
+  }
 });
 
 
 
 
-  app.get("/FacturesAll", async (req, res) => {
-    try {
-      const [factures] = await db.query(`
-        SELECT 
-          f.id AS facture_id,
-          f.nom_client,
-          f.prix_total,
-          f.date_creation,
-          p.id AS produit_id,
-          p.nom AS produit_nom,
-          p.prix_vente AS produit_prix_vente,
-          p.prix_achat AS produit_prix_achat,
-          af.quantite AS produit_quantite
-        FROM 
-          factures f
-        LEFT JOIN 
-          articles_facture af ON f.id = af.facture_id
-        LEFT JOIN 
-          produits p ON af.produit_id = p.id
-      `);
+app.get("/FacturesAll", async (req, res) => {
+  try {
+    const [factures] = await db.query(`
+      SELECT 
+        f.id AS facture_id,
+        f.nom_client,
+        f.prix_total,
+        f.remise_total,  -- Ajout de la remise
+        f.date_creation,
+        p.id AS produit_id,
+        p.nom AS produit_nom,
+        p.prix_vente AS produit_prix_vente,
+        p.prix_achat AS produit_prix_achat,
+        af.quantite AS produit_quantite
+      FROM 
+        factures f
+      LEFT JOIN 
+        articles_facture af ON f.id = af.facture_id
+      LEFT JOIN 
+        produits p ON af.produit_id = p.id
+    `);
 
-      const facturesMap = {};
-      factures.forEach(row => {
-        const factureId = row.facture_id;
-        if (!facturesMap[factureId]) {
-          facturesMap[factureId] = { id: factureId, nom_client: row.nom_client, prix_total: row.prix_total, date_creation: row.date_creation, produits: [] };
-        }
-        if (row.produit_id) {
-          facturesMap[factureId].produits.push({
-            id: row.produit_id, nom: row.produit_nom, quantite: row.produit_quantite,
-            prix_vente: row.produit_prix_vente, prix_achat: row.produit_prix_achat,
-            prix_total: (row.produit_prix_vente * row.produit_quantite).toFixed(2)
-          });
-        }
-      });
+    const facturesMap = {};
+    factures.forEach(row => {
+      const factureId = row.facture_id;
+      if (!facturesMap[factureId]) {
+        facturesMap[factureId] = {
+          id: factureId,
+          nom_client: row.nom_client,
+          prix_total: row.prix_total,
+          remise_total: row.remise_total,  // Ajout dans l'objet facture
+          date_creation: row.date_creation,
+          produits: []
+        };
+      }
+      if (row.produit_id) {
+        facturesMap[factureId].produits.push({
+          id: row.produit_id,
+          nom: row.produit_nom,
+          quantite: row.produit_quantite,
+          prix_vente: row.produit_prix_vente,
+          prix_achat: row.produit_prix_achat,
+          prix_total: (row.produit_prix_vente * row.produit_quantite).toFixed(2)
+        });
+      }
+    });
 
-      res.status(200).json(Object.values(facturesMap));
-    } catch (err) {
-      res.status(500).json({ message: "Erreur serveur", error: err });
-    }
-  });
+    res.status(200).json(Object.values(facturesMap));
+  } catch (err) {
+    res.status(500).json({ message: "Erreur serveur", error: err });
+  }
+});
 
   app.post("/FactureSave", async (req, res) => {
-    const { nom_client, produits } = req.body;
+    const { nom_client, produits, remise_total = 0 } = req.body; // Remise par défaut à 0 si non fournie
     if (!nom_client || !Array.isArray(produits) || produits.length === 0) {
       return res.status(400).json({ message: "Le nom du client et les produits sont requis" });
     }
-
+  
     let conn;
     try {
       conn = await db.getConnection();
       await conn.beginTransaction();
-
+  
       let prix_total = 0;
       const produitsVerifies = [];
-
+  
       for (let produit of produits) {
         const { produit_id, quantite } = produit;
         if (!produit_id || quantite <= 0) {
           await conn.rollback();
           return res.status(400).json({ message: "Chaque produit doit avoir un ID et une quantité valide" });
         }
-
+  
         const [stockResults] = await conn.query("SELECT nom, quantite, prix_vente FROM produits WHERE id = ?", [produit_id]);
         if (stockResults.length === 0) {
           await conn.rollback();
           return res.status(404).json({ message: `Le produit avec l'ID ${produit_id} n'existe pas.` });
         }
-
+  
         const stock = stockResults[0];
         if (stock.quantite < quantite) {
           await conn.rollback();
           return res.status(400).json({ message: `Le produit ${stock.nom} n'a pas assez de stock.` });
         }
-
+  
         produitsVerifies.push({ produit_id, quantite, prix_vente: stock.prix_vente, nom: stock.nom });
         prix_total += stock.prix_vente * quantite;
       }
-
-      const [factureResult] = await conn.query("INSERT INTO factures (nom_client, prix_total, date_creation) VALUES (?, ?, NOW())", [nom_client, prix_total]);
+  
+      // Appliquer la remise au prix total
+      const prix_total_avec_remise = prix_total - remise_total;
+      if (prix_total_avec_remise < 0) {
+        await conn.rollback();
+        return res.status(400).json({ message: "La remise ne peut pas dépasser le prix total" });
+      }
+  
+      const [factureResult] = await conn.query(
+        "INSERT INTO factures (nom_client, prix_total, remise_total, date_creation) VALUES (?, ?, ?, NOW())",
+        [nom_client, prix_total_avec_remise, remise_total]
+      );
       const factureId = factureResult.insertId;
       const articlesData = produitsVerifies.map(p => [factureId, p.produit_id, p.quantite]);
-
+  
       await conn.query("INSERT INTO articles_facture (facture_id, produit_id, quantite) VALUES ?", [articlesData]);
       
       for (let produit of produitsVerifies) {
         await conn.query("UPDATE produits SET quantite = quantite - ? WHERE id = ?", [produit.quantite, produit.produit_id]);
       }
-
+  
       await conn.commit();
-      res.status(201).json({ message: "Facture créée avec succès", data: { factureId, nom_client, prix_total, produits: produitsVerifies } });
+      res.status(201).json({
+        message: "Facture créée avec succès",
+        data: { factureId, nom_client, prix_total: prix_total_avec_remise, remise_total, produits: produitsVerifies }
+      });
     } catch (error) {
       if (conn) await conn.rollback();
       console.error("Erreur lors de l'ajout de la facture :", error);
@@ -664,6 +683,7 @@ app.delete("/ProduitDelete/:id", async (req, res) => {
       if (conn) conn.release();
     }
   });
+
   app.post('/login', (req, res) => {
     const { id, password } = req.body;
 
