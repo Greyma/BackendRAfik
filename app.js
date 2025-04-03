@@ -130,7 +130,6 @@ app.get("/Clients", async (req, res) => {
     const query = "SELECT id, nom, email, telephone, Niss, Niff, Adresse FROM clients";
     try {
       const [results] = await db.query(query);
-      console.log('Clients récupérés :', results);
       if (results.length === 0) return res.status(404).json({ message: "Aucun client trouvé" });
       const clients = results.map(client => ({
         id: client.id,
@@ -221,7 +220,6 @@ app.get("/Fournisseurs", async (req, res) => {
     const query = "SELECT id, nom, email, telephone, Niss, Niff, Adresse FROM fournisseurs";
     try {
       const [results] = await db.query(query);
-      console.log('Fournisseurs récupérés :', results);
       if (results.length === 0) return res.status(404).json({ message: "Aucun fournisseur trouvé" });
       const fournisseurs = results.map(fournisseur => ({
         id: fournisseur.id,
@@ -243,7 +241,6 @@ app.get("/Fournisseurs", async (req, res) => {
     const query = "SELECT id, nom, created_at FROM categories";
     try {
       const [results] = await db.query(query);
-      console.log('Catégories récupérées :', results);  // Ajout du log
       if (results.length === 0) return res.status(404).json({ message: "Aucune catégorie trouvée" });
       const categories = results.map(cat => ({ id: cat.id, nom: cat.nom, date: cat.created_at }));
       res.status(200).json({ data: categories, message: "success" });
@@ -379,10 +376,6 @@ app.get("/Produit/:id", async (req, res) => {
 // Ajouter un nouveau produit
 app.post("/ProduitSave", upload.array("images", 10), async (req, res) => {
     try {
-        console.log("Headers:", req.headers);
-        console.log("Body reçu:", req.body);
-        console.log("Fichiers reçus:", req.files);
-
         const { categorie_id, fournisseur_id, nom, description, prix_vente, prix_achat, quantite, reference, etat } = req.body;
 
         if (!(categorie_id && nom && prix_vente && prix_achat && quantite && reference)) {
