@@ -5,7 +5,7 @@ const express = require("express"),
       path = require("path"),
       db = require("./databases/cnx"),
       app = express(),
-      port = 5478;
+      port = 5477;
 
 
 app.use(cors({
